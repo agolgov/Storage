@@ -1,0 +1,374 @@
+﻿@page "/"
+
+@* @using Storage.Data *@
+@* @using Microsoft.EntityFrameworkCore *@
+@inject IStockService stockService
+@inject IProductService productService
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject DispatcherStorage classStorage
+
+<h2>Склады
+    <button type="button" class="btn btn-outline-primary" @onclick="(() => ShowNewStockDialog())" title="Создать новый склад">
+        <span class="oi oi-file" aria-hidden="true"></span></button>
+</h2>
+@if (objStock is not null)
+{
+    <div class="row alert alert-primary">
+        <div class="col-5">
+            <input type="text" class="form-control" id="obj-stock-name" @bind="objStock.Name" placeholder="Название склада">
+        </div>
+        <div class="col-auto">
+            <button type="button" class="btn btn-outline-success" @onclick="(() => SaveNewStock())" title="Сохранить новый склад">
+                <span class="oi oi-check" aria-hidden="true"></span></button>
+            <button type="button" class="btn btn-outline-secondary" @onclick="(() => CancelNewStock())" title="Отмена">
+                <span class="oi oi-x" aria-hidden="true"></span></button>
+        </div>
+    </div>
+}
+<div class="container-fluid">
+    @if (loading || stockList is null)
+    {
+        <div class="row">
+            <div class="col-12 alert alert-info">Загрузка...</div>
+        </div>
+    }
+
+    @if (stockList is not null && stockList.Count == 0)
+    {
+        <div class="row">
+            <div class="col-12 alert alert-info">Нет складов.</div>
+        </div>
+    }
+
+    @if (stockList is not null)
+    {
+        @foreach (var stock in stockList)
+        {
+            <h3>Склад № @stock.Id: @stock.Name
+                <button type="button" class="btn btn-outline-warning" @onclick="(() => ShowEditStockDialog(stock))" title="Редактировать">
+                    <span class="oi oi-pencil" aria-hidden="true"></span></button>
+                <button type="button" class="btn btn-outline-danger" @onclick="(() => ShowDeleteStockDialog(stock))" title="Удалить">
+                    <span class="oi oi-trash" aria-hidden="true"></span></button>
+            </h3>
+            @if (objStockEdit is not null && objStockEdit.Id == stock.Id)
+            {
+                <div class="row alert alert-warning">
+                    <div class="col-5">
+                        <input type="text" class="form-control" id="obj-stock-name" @bind="objStockEdit.Name" placeholder="Название склада">
+                    </div>
+                    <div class="col-auto">
+                        <button type="button" class="btn btn-outline-success" @onclick="(() => SaveEditStock())" title="Сохранить склад">
+                            <span class="oi oi-check" aria-hidden="true"></span></button>
+                        <button type="button" class="btn btn-outline-secondary" @onclick="(() => CancelEditStock())" title="Отмена">
+                            <span class="oi oi-x" aria-hidden="true"></span></button>
+                    </div>
+                </div>
+            }
+            @if (objStockDelete is not null && objStockDelete.Id == stock.Id)
+            {
+                <div class="row alert alert-danger">
+                    @if (@objStockDelete.Products.Count() == 0)
+                    {
+                        <div class="col-5">
+                            Вы действительно хотите удалить склад @objStockDelete.Name?
+                        </div>
+                        <div class="col-auto">
+                            <button type="button" class="btn btn-outline-success" @onclick="(() => SaveDeleteStock())" title="Удалить склад">
+                                <span class="oi oi-check" aria-hidden="true"></span></button>
+                            <button type="button" class="btn btn-outline-secondary" @onclick="(() => CancelDeleteStock())" title="Отмена">
+                                <span class="oi oi-x" aria-hidden="true"></span></button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="col-5">
+                            На складе еще есть товары, удаление невозможно!
+                        </div>
+                        <div class="col-auto">
+                            <button type="button" class="btn btn-outline-secondary" @onclick="(() => CancelDeleteStock())" title="Отмена">
+                                <span class="oi oi-x" aria-hidden="true"></span></button>
+                        </div>
+                    }
+                </div>
+            }
+            <h4>Товары
+                <button type="button" class="btn btn-outline-primary" @onclick="(() => ShowNewProductDialog(stock.Id))" title="Создать новый вид товара">
+                    <span class="oi oi-file" aria-hidden="true"></span></button>
+            </h4>
+            @if (objProduct is not null && objProduct.StockId == stock.Id)
+            {
+                <div class="row alert alert-primary">
+                    <div class="col-5">
+                        <input type="text" class="form-control" id="obj-product-name" @bind="objProduct.Name" placeholder="Название вида товара">
+                    </div>
+                    <div class="col-1">
+                        <input type="text" class="form-control" id="obj-product-total" @bind="objProduct.Total" placeholder="Количество">
+                    </div>
+                    <div class="col-auto">
+                        <button type="button" class="btn btn-outline-success" @onclick="(() => SaveNewProduct())" title="Сохранить новый вид товара">
+                            <span class="oi oi-check" aria-hidden="true"></span></button>
+                        <button type="button" class="btn btn-outline-secondary" @onclick="(() => CancelNewProduct())" title="Отмена">
+                            <span class="oi oi-x" aria-hidden="true"></span></button>
+                    </div>
+                </div>
+            }
+            @if (stock.Products is null || stock.Products.Count == 0)
+            {
+                <div class="row">
+                    <div class="col-12 alert alert-info">Нет товаров на складе.</div>
+                </div>
+            }
+            else
+            {
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th>Идентификатор</th>
+                            <th>Наименование товара</th>
+                            <th>Количество</th>
+                            <th>Увеличить/уменьшить запас</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var product in stock.Products)
+                        {
+                            <tr>
+                                <td>
+                                    <button type="button" class="btn btn-outline-warning" @onclick="(() => ShowEditProductDialog(product))" title="Редактировать">
+                                        <span class="oi oi-pencil" aria-hidden="true"></span></button>
+                                    <button type="button" class="btn btn-outline-danger" @onclick="(() => ShowDeleteProductDialog(product))" title="Удалить">
+                                        <span class="oi oi-trash" aria-hidden="true"></span></button>
+                                </td>
+                                <td>@product.Id</td>
+                                <td>
+                                    @if (objProductEdit is not null && objProductEdit.Id == product.Id)
+                                    {
+                                        <div class="row alert alert-warning">
+                                            <div class="col-auto">
+                                                <input type="text" class="form-control" id="obj-product-name" @bind="objProductEdit.Name" placeholder="Название вида товара">
+                                            </div>
+                                            <div class="col-auto">
+                                                <button type="button" class="btn btn-outline-success" @onclick="(() => SaveEditProduct())" title="Сохранить товар">
+                                                    <span class="oi oi-check" aria-hidden="true"></span></button>
+                                                <button type="button" class="btn btn-outline-secondary" @onclick="(() => CancelEditProduct())" title="Отмена">
+                                                    <span class="oi oi-x" aria-hidden="true"></span></button>
+                                            </div>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        @product.Name
+                                    }
+                                </td>
+                                <td>@product.Total</td>
+                                <td>
+                                    <button type="button" class="btn btn-light" @onclick="(() => IncrementTotal(product.Id))" title="Увеличить на 1">
+                                        <span class="oi oi-plus" aria-hidden="true"></span></button>
+                                    <button type="button" class="btn btn-light" @onclick="(() => DecrementTotal(product.Id))" title="Уменьшить на 1">
+                                        <span class="oi oi-minus" aria-hidden="true"></span></button>
+                                </td>
+                            </tr>
+                            @if (objProductDelete is not null && objProductDelete.Id == product.Id)
+                            {
+                                <tr>
+                                    <td colspan="5">
+                                        <div class="row alert alert-danger">
+                                            <div class="col-5">
+                                                Вы действительно хотите удалить вид товара @objProductDelete.Name?
+                                            </div>
+                                            <div class="col-auto">
+                                                <button type="button" class="btn btn-outline-success" @onclick="(() => SaveDeleteProduct())" title="Удалить товар">
+                                                    <span class="oi oi-check" aria-hidden="true"></span></button>
+                                                <button type="button" class="btn btn-outline-secondary" @onclick="(() => CancelDeleteProduct())" title="Отмена">
+                                                    <span class="oi oi-x" aria-hidden="true"></span></button>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            }
+        }
+    }
+</div>
+
+@code {
+    //private ICollection<Stock>? Stocks { get; set; }
+    private List<Stock> stockList = new List<Stock>();
+    private Boolean loading = false;
+    private Stock objStock;
+    private Stock objStockEdit;
+    private Stock objStockDelete;
+    private Product objProduct;
+    private Product objProductEdit;
+    private Product objProductDelete;
+
+    protected override async Task OnInitializedAsync()
+    {
+        classStorage.Refresh += Update;
+
+        if (loading)
+        {
+            return;
+        }
+        try
+        {
+            loading = true;
+            stockList = await stockService.GetAllAsync();
+        }
+        finally
+        {
+            loading = false;
+        }
+        
+        await base.OnInitializedAsync();
+    }
+
+    void Update()
+    {
+        InvokeAsync(async () =>
+        {
+            stockList = await stockService.GetAllAsync();
+            StateHasChanged();
+        });
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (loading)
+        {
+            return;
+        }
+        try
+        {
+            loading = true;
+            stockList = await stockService.GetAllAsync();
+        }
+        finally
+        {
+            loading = false;
+        }
+
+        classStorage.OnRefresh();
+    }
+
+    private async Task ShowNewStockDialog()
+    {
+        objStock = new Stock();
+    }
+
+    private async Task SaveNewStock()
+    {
+        await stockService.CreateAsync(objStock);
+        await ReloadAsync();
+        objStock = null;
+    }
+
+    private async Task CancelNewStock()
+    {
+        objStock = null;
+    }
+
+    void ShowEditStockDialog(Stock stockEdit)
+    {
+        objStockEdit = stockEdit;
+    }
+
+    private async Task SaveEditStock()
+    {
+        await stockService.UpdateAsync(objStockEdit);
+        await ReloadAsync();
+        objStockEdit = null;
+    }
+
+    private async Task CancelEditStock()
+    {
+        objStockEdit = null;
+    }
+
+    void ShowDeleteStockDialog(Stock stockDelete)
+    {
+        objStockDelete = stockDelete;
+    }
+
+    private async Task SaveDeleteStock()
+    {
+        await stockService.DeleteAsync(objStockDelete.Id);
+        await ReloadAsync();
+        objStockDelete = null;
+    }
+
+    private async Task CancelDeleteStock()
+    {
+        objStockDelete = null;
+    }
+
+    
+    private async Task ShowNewProductDialog(int stockId)
+    {
+        objProduct = new Product();
+        objProduct.StockId = stockId;
+        objProduct.Total = 1;
+    }
+
+    private async Task SaveNewProduct()
+    {
+        await productService.CreateAsync(objProduct);
+        await ReloadAsync();
+        objProduct = null;
+    }
+
+    private async Task CancelNewProduct()
+    {
+        objProduct = null;
+    }
+
+    void ShowEditProductDialog(Product productEdit)
+    {
+        objProductEdit = productEdit;
+    }
+
+    private async Task SaveEditProduct()
+    {
+        await productService.UpdateAsync(objProductEdit);
+        await ReloadAsync();
+        objProductEdit = null;
+    }
+
+    private async Task CancelEditProduct()
+    {
+        objProductEdit = null;
+    }
+
+    void ShowDeleteProductDialog(Product productDelete)
+    {
+        objProductDelete = productDelete;
+    }
+
+    private async Task SaveDeleteProduct()
+    {
+        await productService.DeleteAsync(objProductDelete.Id);
+        await ReloadAsync();
+        objProductDelete = null;
+    }
+
+    private async Task CancelDeleteProduct()
+    {
+        objProductDelete = null;
+    }
+
+    private async Task IncrementTotal(int productId)
+    {
+        await productService.IncrementAsync(productId);
+        await ReloadAsync();
+    }
+
+    private async Task DecrementTotal(int productId)
+    {
+        await productService.DecrementAsync(productId);
+        await ReloadAsync();
+    }
+}
